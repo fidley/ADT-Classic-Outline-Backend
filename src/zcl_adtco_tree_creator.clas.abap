@@ -109,11 +109,19 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
   METHOD actualize_program_tree.
 
     IF tree_object_type CP 'PROG*'
-    OR tree_object_type CP 'REPS*'.
+    OR tree_object_type CP 'REPS*'
+    OR tree_object_type CP 'FUGR*'.
       CALL FUNCTION 'WB_TREE_ACTUALIZE'
         EXPORTING
           tree_name              = CONV eu_lname( |PG_{ get_object_name( original_object_name = object_name
                                                              original_object_type = object_type ) }| )
+          without_crossreference = abap_true
+          with_tcode_index       = abap_true.
+    ELSEIF tree_object_type CP 'CLAS*' OR
+           tree_object_type CP 'INTF*'.
+      CALL FUNCTION 'WB_TREE_ACTUALIZE'
+        EXPORTING
+          tree_name              = CONV eu_lname( |CP_{ object_name }| )
           without_crossreference = abap_true
           with_tcode_index       = abap_true.
     ENDIF.
