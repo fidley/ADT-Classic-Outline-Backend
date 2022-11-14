@@ -4,12 +4,36 @@ CLASS zcl_adtco_tree_creator DEFINITION
   CREATE PUBLIC .
 
   PUBLIC SECTION.
-    METHODS: create_tree IMPORTING object_name TYPE eu_lname
-                                   object_type TYPE seu_obj
-                         RETURNING VALUE(tree) TYPE snodetab.
+    TYPES: tt_tree TYPE STANDARD TABLE OF snodetext WITH DEFAULT KEY
+                                                    WITH NON-UNIQUE SORTED KEY type COMPONENTS type
+                                                    WITH NON-UNIQUE SORTED KEY method COMPONENTS text1 type.
+
+    METHODS create_tree
+      IMPORTING
+        !object_name      TYPE eu_lname
+        !object_type      TYPE seu_obj
+        VALUE(parameters) TYPE tihttpnvp OPTIONAL
+      RETURNING
+        VALUE(tree)       TYPE tt_tree .
   PROTECTED SECTION.
   PRIVATE SECTION.
-
+    TYPES: BEGIN OF ty_parameters,
+             load_redefinitions_of_method TYPE abap_bool,
+             loadalllevelsofsubclasses    TYPE abap_bool,
+           END OF ty_parameters.
+    TYPES:
+      ty_class_names TYPE RANGE OF seocompo-clsname.
+    METHODS get_subclasses_description
+      IMPORTING
+        original_object_name TYPE eu_lname.
+    METHODS build_class_range
+      IMPORTING
+        original_object_name TYPE eu_lname
+      RETURNING
+        VALUE(class_names)   TYPE ty_class_names.
+    DATA relations TYPE REF TO cl_oo_class_relations.
+    DATA subclasses_descriptions TYPE HASHED TABLE OF seoclasstx WITH UNIQUE KEY clsname.
+    DATA call_parameters TYPE ty_parameters.
     METHODS get_object_name
       IMPORTING
         original_object_name TYPE eu_lname
@@ -24,7 +48,7 @@ CLASS zcl_adtco_tree_creator DEFINITION
     METHODS add_sublcasses
       IMPORTING original_object_name TYPE eu_lname
                 original_object_type TYPE seu_obj
-      CHANGING  VALUE(tree)          TYPE snodetab.
+      CHANGING  VALUE(tree)          TYPE tt_tree.
     METHODS get_class_description
       IMPORTING
         class_name         TYPE seorelkey-clsname
@@ -32,12 +56,12 @@ CLASS zcl_adtco_tree_creator DEFINITION
         VALUE(description) TYPE char72.
     METHODS get_counter
       IMPORTING
-        tree           TYPE snodetab
+        tree           TYPE tt_tree
       RETURNING
         VALUE(counter) TYPE i.
     METHODS get_subclasses
       IMPORTING
-        class_name        TYPE string
+        object_name       TYPE eu_lname
       RETURNING
         VALUE(subclasses) TYPE seo_relkeys.
     METHODS actualize_program_tree
@@ -45,6 +69,47 @@ CLASS zcl_adtco_tree_creator DEFINITION
         object_type      TYPE seu_obj
         object_name      TYPE eu_lname
         tree_object_type TYPE seu_obj.
+    METHODS add_superclasses
+      IMPORTING
+        original_object_name TYPE eu_lname
+        original_object_type TYPE seu_obj
+      CHANGING
+        tree                 TYPE tt_tree.
+    METHODS get_superclasses
+      IMPORTING
+        original_object_name TYPE eu_lname
+      RETURNING
+        VALUE(superclasses)  TYPE seo_relkeys.
+    METHODS add_class_additional_info
+      IMPORTING
+        object_name TYPE eu_lname
+        object_type TYPE seu_obj
+      CHANGING
+        tree        TYPE tt_tree.
+    METHODS add_visibility
+      IMPORTING
+        original_object_name TYPE eu_lname
+        original_object_type TYPE seu_obj
+      CHANGING
+        tree                 TYPE tt_tree.
+    METHODS set_visibility
+      CHANGING
+        node TYPE snodetext.
+    METHODS set_object_type
+      CHANGING
+        node TYPE snodetext.
+    METHODS add_local_classes_attributes
+      CHANGING
+        tree TYPE tt_tree.
+    METHODS add_redefinitions
+      IMPORTING
+        original_object_name TYPE eu_lname
+        original_object_type TYPE seu_obj
+      CHANGING
+        tree                 TYPE tt_tree.
+    METHODS parse_parameters
+      IMPORTING
+        parameters TYPE tihttpnvp.
 ENDCLASS.
 
 
@@ -55,10 +120,11 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
   METHOD add_sublcasses.
     CHECK original_object_type EQ 'CLAS/OC'.
 
-    ASSIGN tree[ type = 'COU' ] TO FIELD-SYMBOL(<parent>).
+    ASSIGN tree[ KEY type COMPONENTS type = 'COU' ] TO FIELD-SYMBOL(<parent>).
     IF sy-subrc EQ 0.
       DATA(counter) = get_counter( tree ).
-      DATA(subclasses) = get_subclasses( CONV #( original_object_name ) ).
+      DATA(subclasses) = get_subclasses( original_object_name ).
+      get_subclasses_description( original_object_name ).
       LOOP AT subclasses ASSIGNING FIELD-SYMBOL(<subclass>).
         IF <parent>-child IS INITIAL.
           <parent>-child = counter.
@@ -71,10 +137,11 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD create_tree.
+    parse_parameters( parameters ).
     DATA(tree_object_type) = get_object_type( object_type ).
-    actualize_program_tree(  object_type      = object_type
-                             object_name      = object_name
-                             tree_object_type = tree_object_type ).
+    actualize_program_tree( object_type      = object_type
+                            object_name      = object_name
+                            tree_object_type = tree_object_type ).
     CALL FUNCTION 'WB_ANYTYPE_RETURN_OBJECT_LIST'
       EXPORTING
         p_object_type        = tree_object_type
@@ -101,10 +168,37 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
         ENDIF.
       ENDIF.
     ENDIF.
+    add_class_additional_info( EXPORTING object_name = object_name
+                                         object_type = object_type
+                               CHANGING  tree        = tree ).
+  ENDMETHOD.
+
+  METHOD add_class_additional_info.
+
+    DATA: line LIKE LINE OF tree.
+    MODIFY TABLE tree FROM line TRANSPORTING kind3 kind4 kind5 kind6 kind7 kind8 kind9.
+
+    add_superclasses( EXPORTING original_object_name = object_name
+                                original_object_type = object_type
+                      CHANGING  tree                 = tree ).
+
     add_sublcasses( EXPORTING original_object_name = object_name
                               original_object_type = object_type
                     CHANGING  tree                 = tree ).
+
+    add_visibility( EXPORTING original_object_name = object_name
+                              original_object_type = object_type
+                    CHANGING  tree                 = tree ).
+
+    add_redefinitions( EXPORTING original_object_name = object_name
+                                 original_object_type = object_type
+                       CHANGING  tree                 = tree ).
+    add_local_classes_attributes( CHANGING tree = tree ).
+
   ENDMETHOD.
+
+
+
 
   METHOD actualize_program_tree.
 
@@ -129,14 +223,26 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
   ENDMETHOD.
 
 
-
-
   METHOD get_class_description.
-    TRY.
-        DATA(class) = CAST cl_oo_class( cl_oo_class=>get_instance( class_name ) ).
-        description = class->class-descript.
-      CATCH cx_class_not_existent ##no_handler.
-    ENDTRY.
+    ASSIGN subclasses_descriptions[ clsname = class_name ] TO FIELD-SYMBOL(<sc>).
+    IF sy-subrc EQ 0.
+      description = <sc>-descript.
+      RETURN.
+    ENDIF.
+    SELECT SINGLE descript  INTO @description
+    FROM seoclasstx
+    WHERE clsname EQ @class_name
+    AND langu EQ @sy-langu.
+  ENDMETHOD.
+
+  METHOD get_subclasses_description.
+    DATA(subclasses) = get_subclasses( original_object_name ).
+    CHECK subclasses IS NOT INITIAL.
+    SELECT clsname, descript  INTO CORRESPONDING FIELDS OF TABLE @subclasses_descriptions
+    FROM seoclasstx
+    FOR ALL ENTRIES IN @subclasses
+    WHERE clsname EQ @subclasses-clsname
+    AND langu EQ @sy-langu.
   ENDMETHOD.
 
 
@@ -182,7 +288,218 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD get_subclasses.
-    subclasses =  CAST cl_oo_class( cl_oo_class=>get_instance( CONV #( class_name ) ) )->get_subclasses( ).
+    DATA: class_range TYPE RANGE OF seor_inheritance_r-refclsname.
+    IF call_parameters-loadalllevelsofsubclasses EQ abap_false.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = object_name ) TO class_range.
+    ENDIF.
+    subclasses = VALUE #( FOR <sc> IN relations->subclasses WHERE ( refclsname IN class_range ) ( clsname = <sc>-clsname ) ).
     SORT subclasses BY clsname.
+    DELETE ADJACENT DUPLICATES FROM subclasses COMPARING clsname.
+
   ENDMETHOD.
+
+  METHOD add_superclasses.
+    CHECK original_object_type EQ 'CLAS/OC'.
+    DATA(superclasses) = get_superclasses( CONV #( original_object_name ) ).
+    ASSIGN tree[ KEY type COMPONENTS type = 'COS' ] TO FIELD-SYMBOL(<parent>).
+    IF sy-subrc EQ 0.
+      DATA(counter) = get_counter( tree ).
+      LOOP AT superclasses ASSIGNING FIELD-SYMBOL(<superclass>).
+        ASSIGN tree[ KEY method COMPONENTS type = 'OOC' text1 = <superclass>-clsname ] TO <parent>.
+        IF sy-subrc EQ 0.
+          IF <parent>-child IS INITIAL.
+            <parent>-child = counter.
+          ENDIF.
+          APPEND VALUE #( text1 = <superclass>-refclsname parent = <parent>-id id = counter type = 'OOC' text2 = get_class_description( <superclass>-refclsname )  ) TO tree.
+          ADD 1 TO counter.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_superclasses.
+    relations = NEW cl_oo_class_relations(
+      clsname         = CONV #( original_object_name )
+      w_superclasses  = abap_true
+      w_subclasses    = abap_true
+      w_references    = abap_false
+      w_redefinitions = call_parameters-load_redefinitions_of_method
+      w_eventhandler  = abap_false
+      w_implementings = abap_false ).
+    LOOP AT relations->superclasses ASSIGNING FIELD-SYMBOL(<superclass>)
+                                    WHERE clsname NE original_object_name.
+      IF NOT line_exists( superclasses[ clsname = <superclass>-clsname refclsname = <superclass>-refclsname ] ).
+        APPEND VALUE #( clsname = <superclass>-clsname refclsname = <superclass>-refclsname ) TO superclasses.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD add_visibility.
+    CHECK original_object_type EQ 'CLAS/OC' OR
+          original_object_type EQ 'INTF/I'.
+
+
+    DATA(class_names) = build_class_range( original_object_name ).
+
+
+    SELECT seocompo~clsname, seocompo~cmpname, version, attrdonly, mtdabstrct, mtdfinal, mtddecltyp, attdecltyp, exposure,typtype, refcmpname,
+          cmptype, mtdtype
+      INTO TABLE @DATA(attributes)
+      FROM seocompodf
+      INNER JOIN seocompo
+      ON seocompo~clsname EQ seocompodf~clsname
+      AND seocompo~cmpname EQ  seocompodf~cmpname
+      WHERE seocompo~clsname IN @class_names.
+
+    SORT attributes BY clsname cmpname version.
+    DELETE ADJACENT DUPLICATES FROM attributes COMPARING clsname cmpname.
+
+    LOOP AT attributes ASSIGNING FIELD-SYMBOL(<att>).
+      LOOP AT tree ASSIGNING FIELD-SYMBOL(<tree>) USING KEY method WHERE text1 = <att>-cmpname
+                                                    AND type NP 'OOL*'.
+
+        IF <att>-cmptype EQ 3 AND <att>-clsname NE original_object_name.
+          <tree>-text8 = <att>-clsname.
+        ENDIF.
+        IF <att>-attrdonly EQ abap_true.
+          <tree>-kind7 = abap_true.
+        ENDIF.
+        IF <att>-mtdfinal EQ abap_true.
+          <tree>-kind8 = abap_true.
+        ENDIF.
+        <tree>-kind9 = COND #( WHEN <att>-attdecltyp IS NOT INITIAL THEN <att>-attdecltyp
+                               WHEN <att>-mtddecltyp IS NOT INITIAL THEN <att>-mtddecltyp
+                               ELSE 0  ).
+
+        IF <att>-mtdabstrct EQ abap_true.
+          <tree>-kind6 = abap_true.
+        ENDIF.
+        <tree>-kind5 = <att>-exposure.
+        <tree>-kind4 = <att>-cmptype.
+        IF <tree>-kind4 EQ 2.
+          CLEAR <tree>-kind4.
+        ENDIF.
+        IF <att>-mtdtype EQ 1.
+          <tree>-kind4 = 2.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+  METHOD add_local_classes_attributes.
+
+    FIELD-SYMBOLS <tree> TYPE snodetext.
+
+    LOOP AT tree ASSIGNING <tree>  WHERE type CP 'OOL*'
+                                    OR  type EQ 'OOL'
+                                    OR  type EQ 'OPL'.
+
+      set_object_type( CHANGING node = <tree> ).
+      set_visibility( CHANGING node = <tree> ).
+
+      IF <tree>-text6+7(1) EQ 'X'."read only
+        <tree>-kind7 = abap_true.
+      ENDIF.
+      IF <tree>-text6(1) EQ 'X'. "final
+        <tree>-kind8 = abap_true.
+      ENDIF.
+      IF <tree>-text6+6(1) EQ 'X'."static
+        <tree>-kind9 = 1.
+      ENDIF.
+      IF <tree>-text6+1(1) EQ 'X'. "abstract
+        <tree>-kind6 = abap_true.
+      ENDIF.
+      IF <tree>-text6+2(1) EQ 'X'. "for testing
+        <tree>-kind3 = abap_true.
+      ENDIF.
+      IF <tree>-text2 EQ 'constant'.
+        <tree>-kind9 = 2.
+        <tree>-kind4 = 0.
+      ELSEIF <tree>-text2 EQ 'event handler'.
+        <tree>-kind4 = 2.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+
+  METHOD set_object_type.
+
+    node-kind4 = SWITCH #( node-type WHEN 'OOLT' THEN 3
+                                         WHEN 'OOLA' THEN 0
+                                         WHEN 'OOLD' THEN 1
+                                         WHEN 'OOLI' THEN 1
+                                         WHEN 'OOLE' THEN 2
+                                         ELSE space ).
+
+  ENDMETHOD.
+
+
+
+  METHOD set_visibility.
+
+    node-kind5 = SWITCH #( node-name WHEN '@5B@' THEN 2
+                                         WHEN '@5C@' THEN 0
+                                         WHEN '@5D@' THEN 1 ).
+
+  ENDMETHOD.
+
+
+
+  METHOD build_class_range.
+    IF  relations IS NOT INITIAL.
+      LOOP AT relations->superclasses ASSIGNING FIELD-SYMBOL(<superclass>).
+        IF sy-tabix EQ 1.
+          APPEND VALUE #( sign = 'I' option = 'EQ' low = <superclass>-clsname ) TO class_names.
+        ENDIF.
+        APPEND VALUE #( sign = 'I' option = 'EQ' low = <superclass>-refclsname ) TO class_names.
+      ENDLOOP.
+      IF sy-subrc NE 0.
+        APPEND VALUE #( sign = 'I' option = 'EQ' low = original_object_name ) TO class_names.
+      ENDIF.
+    ELSE.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = original_object_name ) TO class_names.
+    ENDIF.
+  ENDMETHOD.
+
+
+
+
+  METHOD add_redefinitions.
+    IF relations IS NOT INITIAL AND call_parameters-load_redefinitions_of_method EQ abap_true.
+
+      DATA(counter) = get_counter( tree ).
+      LOOP AT relations->redefinitions ASSIGNING FIELD-SYMBOL(<red>).
+        ASSIGN tree[ KEY method COMPONENTS text1 = <red>-mtdname type = 'OOM'  ] TO FIELD-SYMBOL(<parent>).
+        IF sy-subrc EQ 0.
+          IF <parent>-child IS INITIAL.
+            <parent>-child = counter.
+          ENDIF.
+          APPEND VALUE #( text1 = <red>-clsname parent = <parent>-id id = counter type = zcl_adtco_uri_mapper=>node_types-method_redefintion_class text2 = get_class_description( <red>-clsname ) text8 = <red>-mtdname ) TO tree.
+          ADD 1 TO counter.
+        ENDIF.
+      ENDLOOP.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD parse_parameters.
+    CONSTANTS fetchredefinitionsformehtods TYPE string VALUE 'FetchRedefinitionsForMehtods' ##NO_TEXT.
+    CONSTANTS loadalllevelsofsubclasses TYPE string VALUE 'LoadAllLevelsOfSubclasses' ##NO_TEXT.
+    LOOP AT parameters ASSIGNING FIELD-SYMBOL(<par>).
+      CASE <par>-name.
+        WHEN fetchredefinitionsformehtods.
+          call_parameters-load_redefinitions_of_method = <par>-value.
+        WHEN loadalllevelsofsubclasses.
+          call_parameters-loadalllevelsofsubclasses = <par>-value.
+      ENDCASE.
+    ENDLOOP.
+  ENDMETHOD.
+
 ENDCLASS.
