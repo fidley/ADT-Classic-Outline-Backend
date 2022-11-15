@@ -18,8 +18,9 @@ CLASS zcl_adtco_tree_creator DEFINITION
   PROTECTED SECTION.
   PRIVATE SECTION.
     TYPES: BEGIN OF ty_parameters,
-             load_redefinitions_of_method TYPE abap_bool,
-             loadalllevelsofsubclasses    TYPE abap_bool,
+             load_redefinitions_of_method  TYPE abap_bool,
+             load_all_levels_of_subclasses TYPE abap_bool,
+             load_all_levels_of_redef      TYPE abap_bool,
            END OF ty_parameters.
     TYPES:
       ty_class_names TYPE RANGE OF seocompo-clsname.
@@ -298,7 +299,7 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD get_subclasses.
-    IF call_parameters-loadalllevelsofsubclasses EQ abap_false.
+    IF call_parameters-load_all_levels_of_subclasses EQ abap_false.
       subclasses = get_first_level_subclasses( object_name ).
     ELSE.
       subclasses = VALUE #( FOR <sc> IN relations->subclasses ( clsname = <sc>-clsname ) ).
@@ -331,10 +332,12 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
     relations = NEW cl_oo_class_relations(
       clsname         = CONV #( original_object_name )
       w_superclasses  = abap_true
-      w_subclasses    = call_parameters-loadalllevelsofsubclasses
+      w_subclasses    = COND #( WHEN call_parameters-load_all_levels_of_subclasses EQ abap_true
+                                 OR call_parameters-load_all_levels_of_redef EQ abap_true THEN abap_true
+                                ELSE abap_false )
       w_references    = abap_false
       w_redefinitions = COND #( WHEN call_parameters-load_redefinitions_of_method EQ abap_true
-                                 AND call_parameters-loadalllevelsofsubclasses EQ abap_true THEN abap_true
+                                 AND call_parameters-load_all_levels_of_redef EQ abap_true THEN abap_true
                                  ELSE abap_false )
       w_eventhandler  = abap_false
       w_implementings = abap_false ).
@@ -483,11 +486,12 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
   METHOD add_redefinitions.
     DATA: redefinitions TYPE seor_redefinitions_r.
-    CHECK relations IS NOT INITIAL.
-    IF call_parameters-load_redefinitions_of_method EQ abap_true AND
-       call_parameters-loadalllevelsofsubclasses EQ abap_false.
+    CHECK relations IS NOT INITIAL AND
+          call_parameters-load_redefinitions_of_method EQ abap_true.
+
+    IF call_parameters-load_all_levels_of_redef EQ abap_false.
       redefinitions = get_first_lvl_of_redefinitions( original_object_name ).
-    ELSEIF call_parameters-load_redefinitions_of_method EQ abap_true.
+    ELSE.
       redefinitions = relations->redefinitions.
     ENDIF.
     DATA(counter) = get_counter( tree ).
@@ -507,12 +511,15 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
   METHOD parse_parameters.
     CONSTANTS fetchredefinitionsformehtods TYPE string VALUE 'FetchRedefinitionsForMehtods' ##NO_TEXT.
     CONSTANTS loadalllevelsofsubclasses TYPE string VALUE 'LoadAllLevelsOfSubclasses' ##NO_TEXT.
+    CONSTANTS loadalllevelsofredefinitions TYPE string VALUE 'LoadAllLevelsOfRedefinitions' ##NO_TEXT.
     LOOP AT parameters ASSIGNING FIELD-SYMBOL(<par>).
       CASE <par>-name.
         WHEN fetchredefinitionsformehtods.
           call_parameters-load_redefinitions_of_method = <par>-value.
         WHEN loadalllevelsofsubclasses.
-          call_parameters-loadalllevelsofsubclasses = <par>-value.
+          call_parameters-load_all_levels_of_subclasses = <par>-value.
+        WHEN loadalllevelsofredefinitions.
+          call_parameters-load_all_levels_of_redef = <par>-value.
       ENDCASE.
     ENDLOOP.
   ENDMETHOD.

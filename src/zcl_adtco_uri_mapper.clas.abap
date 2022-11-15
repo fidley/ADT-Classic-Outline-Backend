@@ -40,7 +40,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
                  program_include TYPE string VALUE 'PROG/I',
                END OF object_types,
                BEGIN OF context,
-                 fg                           TYPE string VALUE `/source/main?context=%2fsap%2fbc%2fadt%2ffunctions%2fgroups%2f` ##NO_TEXT,
+                 fg                           TYPE string VALUE `/source/main` ##NO_TEXT,
                  program_lcl_method           TYPE string VALUE `/source/main#type=PROG%2FPLM;name=` ##NO_TEXT,
                  fg_lcl_method                TYPE string VALUE `#type=PROG%2FPLM;name=` ##NO_TEXT,
                  includes                     TYPE string VALUE 'includes/' ##NO_TEXT,
@@ -169,6 +169,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
       RETURNING VALUE(escaped_string) TYPE string.
     METHODS get_uri_for_semantic_object
       IMPORTING
+        wb_request  type ref to cl_wb_request
         object_type TYPE seu_obj
         object_name TYPE eu_lname
         node        TYPE snodetext
@@ -176,6 +177,20 @@ CLASS zcl_adtco_uri_mapper DEFINITION
         VALUE(uri)  TYPE string
       RAISING
         cx_adt_uri_mapping.
+    METHODS adapt_uri_for_includes
+      IMPORTING
+        object_name TYPE eu_lname
+        adt_ref     TYPE REF TO cl_adt_object_reference
+      CHANGING
+        uri         TYPE string.
+    METHODS get_uri_from_wb_request
+      IMPORTING
+        node        TYPE snodetext
+        object_name TYPE eu_lname
+        object_type TYPE seu_obj
+        wb_request  TYPE REF TO cl_wb_request
+      RETURNING
+        VALUE(uri)  TYPE string.
 
 ENDCLASS.
 
@@ -209,73 +224,6 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
     CHECK node-type(1) NE 'C'.
     node-type = build_node_type( node ).
 
-    DATA(wb) = cl_wb_object=>create_from_toolaccess_key(
-             p_object_type           = CONV #( node-type+1(3) )
-             p_object_name           = build_object_name( REF #( node ) )
-             p_enclosing_object      = build_enclosed_object(
-                                                    object_name = object_name
-                                                    object_type = object_type
-                                                    node       = REF #( node ) )
-             ).
-    IF sy-subrc EQ 0.
-      wb->get_request_key(
-        IMPORTING
-          p_object_type     = DATA(objtype)
-          p_object_name     = DATA(objkey)
-        EXCEPTIONS
-          key_not_available = 1
-          OTHERS            = 2
-      ).
-      IF sy-subrc EQ 0.
-
-        cl_wb_request=>create_from_object_ref(
-          EXPORTING
-            p_wb_object       = wb
-          RECEIVING
-            p_wb_request      = DATA(wb_request)
-          EXCEPTIONS
-            illegal_operation = 1
-            cancelled         = 2
-            OTHERS            = 3
-        ).
-        IF sy-subrc EQ 0.
-          TRY.
-              DATA(adt_reference) = cl_adt_tools_core_factory=>get_instance( )->get_uri_mapper( )->map_wb_request_to_objref( wb_request ).
-              uri = adt_reference->ref_data-uri.
-              adapt_uri_for_subclasses(
-                EXPORTING
-                  object_type = object_type
-                  object_name = object_name
-                  node        = node
-                  objtype     = objtype
-                CHANGING
-                  uri         = uri ).
-            CATCH cx_adt_uri_mapping.
-              TRY.
-                  uri = get_uri_for_semantic_object( object_type = object_type
-                                                     object_name = object_name
-                                                     node        = node ).
-                CATCH cx_root.
-
-                  uri = get_uri_directly( node                 = node
-                                          original_object_name = object_name
-                                          original_object_type = object_type ).
-                  IF uri IS NOT INITIAL.
-                    RETURN.
-                  ENDIF.
-              ENDTRY.
-          ENDTRY.
-
-
-        ENDIF.
-      ENDIF.
-    ENDIF.
-  ENDMETHOD.
-
-  METHOD get_uri_for_semantic_object.
-
-    DATA wb_request TYPE REF TO cl_wb_request.
-
     cl_wb_request=>create_from_encl_name(
       EXPORTING
         p_r3tr_type         = CONV #( object_type )
@@ -287,10 +235,50 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
                                             node       = REF #( node ) )
         p_operation         = swbm_c_op_display
       RECEIVING
-        p_wb_request        = wb_request
+        p_wb_request        = DATA(wb_request)
     EXCEPTIONS
       OTHERS              = 0 ).
-    DATA(adtcore) = cl_adt_tools_core_factory=>get_instance( ).
+    uri = get_uri_from_wb_request(
+      node        = node
+      object_name = object_name
+      object_type = object_type
+      wb_request  = wb_request ).
+  ENDMETHOD.
+
+  METHOD get_uri_from_wb_request.
+
+    TRY.
+        uri = get_uri_for_semantic_object( wb_request  = wb_request
+                                           object_type = object_type
+                                           object_name = object_name
+                                           node        = node ).
+      CATCH cx_root.
+        TRY.
+            DATA(adt_reference) = cl_adt_tools_core_factory=>get_instance( )->get_uri_mapper( )->map_wb_request_to_objref( wb_request ).
+            uri = adt_reference->ref_data-uri.
+            adapt_uri_for_subclasses(
+              EXPORTING
+                object_type = object_type
+                object_name = object_name
+                node        = node
+                objtype     = wb_request->object_type
+              CHANGING
+                uri         = uri ).
+          CATCH cx_adt_uri_mapping.
+            uri = get_uri_directly( node                 = node
+                                    original_object_name = object_name
+                                    original_object_type = object_type ).
+        ENDTRY.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+
+  METHOD get_uri_for_semantic_object.
+
+   DATA(adtcore) = cl_adt_tools_core_factory=>get_instance( ).
     DATA: semantic_builder TYPE REF TO object.
     DATA: adt_ref TYPE REF TO cl_adt_object_reference.
     CALL METHOD adtcore->('GET_SEMANTIC_URI_BUILDER')
@@ -300,12 +288,27 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
     CALL METHOD semantic_builder->('IF_ADT_SEMANTIC_URI_BUILDER~MAP_WB_REQUEST_TO_OBJREF')
       EXPORTING
         i_wb_request    = wb_request
-        i_include_w_pos = CONV syrepid( node-text9+4 )
+        i_include_w_pos = cond sy-repid( when node-text9(4) eq 'REPS' then node-text9+4 )
       RECEIVING
         result          = adt_ref.
     uri = adt_ref->ref_data-uri.
+    adapt_uri_for_includes( EXPORTING object_name = object_name
+                                      adt_ref     = adt_ref
+                            CHANGING  uri         = uri ).
     do_escaping = abap_true.
   ENDMETHOD.
+
+  METHOD adapt_uri_for_includes.
+
+    IF adt_ref->ref_data-uri CP '*/programs/programs/*' AND
+       adt_ref->ref_data-type CP 'PROG*' AND
+       adt_ref->ref_data-name NE object_name.
+      REPLACE '/programs/programs/' IN uri WITH '/programs/includes/'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
 
 
 
@@ -381,7 +384,11 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
            swbm_c_type_cls_lintf_event OR
            swbm_c_type_cls_lintf_type OR
            swbm_c_type_cls_lintf_intf .
-        object_name = |{ node->text9+4(36) }                                   { node->text1 }|.
+        IF strlen( node->text9 ) GE 4 AND node->text9(4) EQ object_types-report_include.
+          object_name = node->text1.
+        ELSE.
+          object_name = |{ node->text9+4(36) }                                   { node->text1 }|.
+        ENDIF.
       WHEN swbm_c_type_cls_mtd_impl." OR swbm_c_type_intf_type.
         IF node->text8 IS NOT INITIAL.
           object_name = node->text8.
@@ -559,7 +566,8 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
   METHOD build_fg_uri.
     r_result = |{ context-includes }{
      escape_string( node-text8(40) ) }{ context-fg }{
-      escape_string( original_object_name ) }{ get_context_for_fg_node_type( node-type ) }{ build_internal_name( node ) }|.
+      "escape_string( original_object_name ) }{
+       get_context_for_fg_node_type( node-type ) }{ build_internal_name( node ) }|.
   ENDMETHOD.
 
   METHOD build_program_uri.
