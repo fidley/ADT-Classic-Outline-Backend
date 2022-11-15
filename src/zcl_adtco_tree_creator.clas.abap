@@ -110,6 +110,16 @@ CLASS zcl_adtco_tree_creator DEFINITION
     METHODS parse_parameters
       IMPORTING
         parameters TYPE tihttpnvp.
+    METHODS get_first_level_subclasses
+      IMPORTING
+        class_name        TYPE eu_lname
+      RETURNING
+        VALUE(subclasses) TYPE seo_relkeys.
+    METHODS get_first_lvl_of_redefinitions
+      IMPORTING
+        class_name           TYPE eu_lname
+      RETURNING
+        VALUE(redefinitions) TYPE seor_redefinitions_r.
 ENDCLASS.
 
 
@@ -118,7 +128,7 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD add_sublcasses.
-    CHECK original_object_type EQ 'CLAS/OC'.
+    CHECK relations IS NOT INITIAL.
 
     ASSIGN tree[ KEY type COMPONENTS type = 'COU' ] TO FIELD-SYMBOL(<parent>).
     IF sy-subrc EQ 0.
@@ -288,14 +298,13 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD get_subclasses.
-    DATA: class_range TYPE RANGE OF seor_inheritance_r-refclsname.
     IF call_parameters-loadalllevelsofsubclasses EQ abap_false.
-      APPEND VALUE #( sign = 'I' option = 'EQ' low = object_name ) TO class_range.
+      subclasses = get_first_level_subclasses( object_name ).
+    ELSE.
+      subclasses = VALUE #( FOR <sc> IN relations->subclasses ( clsname = <sc>-clsname ) ).
     ENDIF.
-    subclasses = VALUE #( FOR <sc> IN relations->subclasses WHERE ( refclsname IN class_range ) ( clsname = <sc>-clsname ) ).
     SORT subclasses BY clsname.
     DELETE ADJACENT DUPLICATES FROM subclasses COMPARING clsname.
-
   ENDMETHOD.
 
   METHOD add_superclasses.
@@ -322,9 +331,11 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
     relations = NEW cl_oo_class_relations(
       clsname         = CONV #( original_object_name )
       w_superclasses  = abap_true
-      w_subclasses    = abap_true
+      w_subclasses    = call_parameters-loadalllevelsofsubclasses
       w_references    = abap_false
-      w_redefinitions = call_parameters-load_redefinitions_of_method
+      w_redefinitions = COND #( WHEN call_parameters-load_redefinitions_of_method EQ abap_true
+                                 AND call_parameters-loadalllevelsofsubclasses EQ abap_true THEN abap_true
+                                 ELSE abap_false )
       w_eventhandler  = abap_false
       w_implementings = abap_false ).
     LOOP AT relations->superclasses ASSIGNING FIELD-SYMBOL(<superclass>)
@@ -471,21 +482,25 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD add_redefinitions.
-    IF relations IS NOT INITIAL AND call_parameters-load_redefinitions_of_method EQ abap_true.
-
-      DATA(counter) = get_counter( tree ).
-      LOOP AT relations->redefinitions ASSIGNING FIELD-SYMBOL(<red>).
-        ASSIGN tree[ KEY method COMPONENTS text1 = <red>-mtdname type = 'OOM'  ] TO FIELD-SYMBOL(<parent>).
-        IF sy-subrc EQ 0.
-          IF <parent>-child IS INITIAL.
-            <parent>-child = counter.
-          ENDIF.
-          APPEND VALUE #( text1 = <red>-clsname parent = <parent>-id id = counter type = zcl_adtco_uri_mapper=>node_types-method_redefintion_class text2 = get_class_description( <red>-clsname ) text8 = <red>-mtdname ) TO tree.
-          ADD 1 TO counter.
-        ENDIF.
-      ENDLOOP.
-
+    DATA: redefinitions TYPE seor_redefinitions_r.
+    CHECK relations IS NOT INITIAL.
+    IF call_parameters-load_redefinitions_of_method EQ abap_true AND
+       call_parameters-loadalllevelsofsubclasses EQ abap_false.
+      redefinitions = get_first_lvl_of_redefinitions( original_object_name ).
+    ELSEIF call_parameters-load_redefinitions_of_method EQ abap_true.
+      redefinitions = relations->redefinitions.
     ENDIF.
+    DATA(counter) = get_counter( tree ).
+    LOOP AT redefinitions ASSIGNING FIELD-SYMBOL(<red>).
+      ASSIGN tree[ KEY method COMPONENTS text1 = <red>-mtdname type = 'OOM'  ] TO FIELD-SYMBOL(<parent>).
+      IF sy-subrc EQ 0.
+        IF <parent>-child IS INITIAL.
+          <parent>-child = counter.
+        ENDIF.
+        APPEND VALUE #( text1 = <red>-clsname parent = <parent>-id id = counter type = zcl_adtco_uri_mapper=>node_types-method_redefintion_class text2 = get_class_description( <red>-clsname ) text8 = <red>-mtdname ) TO tree.
+        ADD 1 TO counter.
+      ENDIF.
+    ENDLOOP.
   ENDMETHOD.
 
 
@@ -500,6 +515,22 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
           call_parameters-loadalllevelsofsubclasses = <par>-value.
       ENDCASE.
     ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD get_first_level_subclasses.
+    SELECT clsname , refclsname FROM vseoextend
+         INTO CORRESPONDING FIELDS OF TABLE @subclasses
+         WHERE refclsname = @class_name
+         AND ( version = '0' OR version = '1' ).
+  ENDMETHOD.
+
+
+  METHOD get_first_lvl_of_redefinitions.
+    SELECT * FROM seoredef INTO CORRESPONDING FIELDS OF TABLE @redefinitions
+    WHERE refclsname = @class_name.
+    SORT redefinitions BY clsname mtdname.
+    DELETE ADJACENT DUPLICATES FROM redefinitions COMPARING clsname mtdname.
   ENDMETHOD.
 
 ENDCLASS.
