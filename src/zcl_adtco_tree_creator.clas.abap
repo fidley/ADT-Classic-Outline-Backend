@@ -352,7 +352,7 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
   METHOD add_visibility.
     CHECK original_object_type EQ 'CLAS/OC' OR
-          original_object_type EQ 'INTF/I'.
+          original_object_type EQ 'INTF/OI'.
 
 
     DATA(class_names) = build_class_range( original_object_name ).
@@ -409,6 +409,7 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
     FIELD-SYMBOLS <tree> TYPE snodetext.
 
     LOOP AT tree ASSIGNING <tree>  WHERE type CP 'OOL*'
+                                    OR type CP 'OON*'
                                     OR  type EQ 'OOL'
                                     OR  type EQ 'OPL'.
 
@@ -444,11 +445,11 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
   METHOD set_object_type.
 
-    node-kind4 = SWITCH #( node-type WHEN 'OOLT' THEN 3
-                                         WHEN 'OOLA' THEN 0
-                                         WHEN 'OOLD' THEN 1
-                                         WHEN 'OOLI' THEN 1
-                                         WHEN 'OOLE' THEN 2
+    node-kind4 = SWITCH #( node-type WHEN 'OOLT' OR 'OONT'  THEN 3
+                                         WHEN 'OOLA' OR 'OONA' THEN 0
+                                         WHEN 'OOLD' OR 'OOND' THEN 1
+                                         WHEN 'OOLI' OR 'OONI' THEN 1
+                                         WHEN 'OOLE' OR 'OONE' THEN 2
                                          ELSE space ).
 
   ENDMETHOD.
@@ -509,12 +510,12 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD parse_parameters.
-    CONSTANTS fetchredefinitionsformehtods TYPE string VALUE 'FetchRedefinitionsForMehtods' ##NO_TEXT.
+    CONSTANTS fetchredefinitionsformethods TYPE string VALUE 'FetchRedefinitionsForMethods' ##NO_TEXT.
     CONSTANTS loadalllevelsofsubclasses TYPE string VALUE 'LoadAllLevelsOfSubclasses' ##NO_TEXT.
     CONSTANTS loadalllevelsofredefinitions TYPE string VALUE 'LoadAllLevelsOfRedefinitions' ##NO_TEXT.
     LOOP AT parameters ASSIGNING FIELD-SYMBOL(<par>).
       CASE <par>-name.
-        WHEN fetchredefinitionsformehtods.
+        WHEN fetchredefinitionsformethods.
           call_parameters-load_redefinitions_of_method = <par>-value.
         WHEN loadalllevelsofsubclasses.
           call_parameters-load_all_levels_of_subclasses = <par>-value.

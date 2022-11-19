@@ -169,7 +169,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
       RETURNING VALUE(escaped_string) TYPE string.
     METHODS get_uri_for_semantic_object
       IMPORTING
-        wb_request  type ref to cl_wb_request
+        wb_request  TYPE REF TO cl_wb_request
         object_type TYPE seu_obj
         object_name TYPE eu_lname
         node        TYPE snodetext
@@ -185,12 +185,28 @@ CLASS zcl_adtco_uri_mapper DEFINITION
         uri         TYPE string.
     METHODS get_uri_from_wb_request
       IMPORTING
-        node        TYPE snodetext
-        object_name TYPE eu_lname
-        object_type TYPE seu_obj
-        wb_request  TYPE REF TO cl_wb_request
+        node              TYPE snodetext
+        object_name       TYPE eu_lname
+        object_type       TYPE seu_obj
+        VALUE(wb_request) TYPE REF TO cl_wb_request
       RETURNING
-        VALUE(uri)  TYPE string.
+        VALUE(uri)        TYPE string.
+    METHODS update_node_for_750_classes
+      IMPORTING
+        node            TYPE REF TO snodetext
+      CHANGING
+        enclosed_object TYPE char70.
+    METHODS correct_object_type
+      IMPORTING
+        node        TYPE snodetext
+      CHANGING
+        object_type TYPE seu_obj.
+    METHODS get_workbench_request
+      IMPORTING
+                object_type       TYPE seu_obj
+                object_name       TYPE eu_lname
+                node              TYPE snodetext
+      RETURNING VALUE(wb_request) TYPE REF TO cl_wb_request.
 
 ENDCLASS.
 
@@ -223,7 +239,8 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
   METHOD get_uri_for_tree_node.
     CHECK node-type(1) NE 'C'.
     node-type = build_node_type( node ).
-
+    correct_object_type( EXPORTING node        = node
+                         CHANGING  object_type = object_type ).
     cl_wb_request=>create_from_encl_name(
       EXPORTING
         p_r3tr_type         = CONV #( object_type )
@@ -245,6 +262,16 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
       wb_request  = wb_request ).
   ENDMETHOD.
 
+  METHOD correct_object_type.
+
+    IF ( object_type EQ 'CLAS/OC' AND ( node-type CP 'OI*' OR node-type EQ 'OOI') ).
+      object_type = 'INTF/OI'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+
   METHOD get_uri_from_wb_request.
 
     TRY.
@@ -254,6 +281,10 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
                                            node        = node ).
       CATCH cx_root.
         TRY.
+            wb_request = get_workbench_request(
+              object_type = object_type
+              object_name = object_name
+              node        = node ).
             DATA(adt_reference) = cl_adt_tools_core_factory=>get_instance( )->get_uri_mapper( )->map_wb_request_to_objref( wb_request ).
             uri = adt_reference->ref_data-uri.
             adapt_uri_for_subclasses(
@@ -274,11 +305,36 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD get_workbench_request.
+
+    DATA(wb) = cl_wb_object=>create_from_toolaccess_key(
+     p_object_type           = CONV #( node-type+1(3) )
+     p_object_name           = build_object_name( REF #( node ) )
+     p_enclosing_object      = build_enclosed_object(
+                                            object_name = object_name
+                                            object_type = object_type
+                                            node       = REF #( node ) )
+     ).
+    cl_wb_request=>create_from_object_ref(
+      EXPORTING
+        p_wb_object       = wb
+      RECEIVING
+        p_wb_request      = wb_request
+      EXCEPTIONS
+        illegal_operation = 1
+        cancelled         = 2
+        OTHERS            = 3
+    ).
+
+  ENDMETHOD.
+
+
+
 
 
   METHOD get_uri_for_semantic_object.
 
-   DATA(adtcore) = cl_adt_tools_core_factory=>get_instance( ).
+    DATA(adtcore) = cl_adt_tools_core_factory=>get_instance( ).
     DATA: semantic_builder TYPE REF TO object.
     DATA: adt_ref TYPE REF TO cl_adt_object_reference.
     CALL METHOD adtcore->('GET_SEMANTIC_URI_BUILDER')
@@ -288,7 +344,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
     CALL METHOD semantic_builder->('IF_ADT_SEMANTIC_URI_BUILDER~MAP_WB_REQUEST_TO_OBJREF')
       EXPORTING
         i_wb_request    = wb_request
-        i_include_w_pos = cond sy-repid( when node-text9(4) eq 'REPS' then node-text9+4 )
+        i_include_w_pos = COND sy-repid( WHEN node-text9(4) EQ 'REPS' THEN node-text9+4 )
       RECEIVING
         result          = adt_ref.
     uri = adt_ref->ref_data-uri.
@@ -434,6 +490,8 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
         IF object_type EQ object_types-fg.
           enclosed_object(40) = get_fg_main_program_name( object_name ).
         ENDIF.
+        update_node_for_750_classes( EXPORTING node            = node
+                                     CHANGING  enclosed_object = enclosed_object ).
       WHEN swbm_c_type_intf_type OR
            swbm_c_type_intf_attribute.
         IF node->text8 IS NOT INITIAL.
@@ -460,6 +518,37 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
+
+  METHOD update_node_for_750_classes.
+
+    IF node->text9 CP '*=*'.
+      DATA: component_version TYPE saprelease .
+      CALL FUNCTION 'DELIVERY_GET_COMPONENT_RELEASE'
+        EXPORTING
+          iv_compname    = 'SAP_BASIS'
+        IMPORTING
+          ev_compvers    = component_version
+        EXCEPTIONS
+          comp_not_found = 1
+          OTHERS         = 2.
+      IF sy-subrc EQ 0 AND component_version >= 750.
+        FIND FIRST OCCURRENCE OF '=' IN node->text9 MATCH OFFSET DATA(offset).
+        IF sy-subrc EQ 0.
+**            node->text9 = node->text9(offset).
+          offset = offset - 4.
+          enclosed_object(40) = node->text9+4(offset).
+          node->text8(40) = node->text9+4(offset).
+          IF ( node->text9 CP '*=CCIMP' ) AND node->type+1(3) EQ swbm_c_type_cls_loc_meth_def.
+            node->text9+4 = node->text9+4(offset).
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
 
   METHOD get_fg_main_program_name.
 
