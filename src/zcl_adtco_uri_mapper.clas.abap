@@ -4,6 +4,18 @@ CLASS zcl_adtco_uri_mapper DEFINITION
   CREATE PRIVATE .
 
   PUBLIC SECTION.
+    CONSTANTS: BEGIN OF node_types,
+                 lcl_interface_type        TYPE string VALUE 'OONT' ##NO_TEXT,
+                 lcl_interface_method_def  TYPE string VALUE 'OOND' ##NO_TEXT,
+                 lcl_interface_attribute   TYPE string VALUE 'OONA' ##NO_TEXT,
+                 lcl_interface_interface   TYPE string VALUE 'OONN' ##NO_TEXT,
+                 lcl_method_definition     TYPE string VALUE 'OOLD' ##NO_TEXT,
+                 lcl_method_implementation TYPE string VALUE 'OOLI' ##NO_TEXT,
+                 lcl_attribute             TYPE string VALUE 'OOLA' ##NO_TEXT,
+                 lcl_type                  TYPE string VALUE 'OOLT' ##NO_TEXT,
+                 lcl_interface             TYPE string VALUE 'OOLN' ##NO_TEXT,
+                 method_redefintion_class  TYPE string VALUE 'ROM' ##NO_TEXT,
+               END OF node_types.
     CLASS-METHODS: get_instance RETURNING VALUE(uri_mapper) TYPE REF TO zcl_adtco_uri_mapper.
     METHODS: get_uri_for_tree_node IMPORTING VALUE(node)        TYPE snodetext
                                              VALUE(object_name) TYPE eu_lname
@@ -12,23 +24,23 @@ CLASS zcl_adtco_uri_mapper DEFINITION
   PROTECTED SECTION.
   PRIVATE SECTION.
     CONSTANTS: BEGIN OF prefix,
-                 reps         TYPE string VALUE 'REPS' ##NO_TEXT,
-                 type         TYPE string VALUE 'TYPE' ##NO_TEXT,
-                 fugr_pattern TYPE string VALUE 'FUGR/*' ##NO_TEXT,
+                 reps          TYPE string VALUE 'REPS' ##NO_TEXT,
+                 type          TYPE string VALUE 'TYPE' ##NO_TEXT,
+                 fugr_pattern  TYPE string VALUE 'FUGR/*' ##NO_TEXT,
                  class_pattern TYPE string VALUE 'CLAS*' ##NO_TEXT,
-                 adt_fg       TYPE string VALUE `/sap/bc/adt/functions/groups/` ##NO_TEXT,
-                 adt_program  TYPE string VALUE `/sap/bc/adt/programs/` ##NO_TEXT,
+                 adt_fg        TYPE string VALUE `/sap/bc/adt/functions/groups/` ##NO_TEXT,
+                 adt_program   TYPE string VALUE `/sap/bc/adt/programs/` ##NO_TEXT,
                END OF prefix,
                BEGIN OF object_types,
-                 fm             TYPE string VALUE 'FUGR/FF',
-                 fg             TYPE string VALUE 'FUGR/F',
-                 fg_include     TYPE string VALUE 'FUGR/I',
-                 interface      TYPE string VALUE 'INTF',
-                 report_include TYPE string VALUE 'REPS',
+                 fm              TYPE string VALUE 'FUGR/FF',
+                 fg              TYPE string VALUE 'FUGR/F',
+                 fg_include      TYPE string VALUE 'FUGR/I',
+                 interface       TYPE string VALUE 'INTF',
+                 report_include  TYPE string VALUE 'REPS',
                  program_include TYPE string VALUE 'PROG/I',
                END OF object_types,
                BEGIN OF context,
-                 fg                           TYPE string VALUE `/source/main?context=%2fsap%2fbc%2fadt%2ffunctions%2fgroups%2f` ##NO_TEXT,
+                 fg                           TYPE string VALUE `/source/main` ##NO_TEXT,
                  program_lcl_method           TYPE string VALUE `/source/main#type=PROG%2FPLM;name=` ##NO_TEXT,
                  fg_lcl_method                TYPE string VALUE `#type=PROG%2FPLM;name=` ##NO_TEXT,
                  includes                     TYPE string VALUE 'includes/' ##NO_TEXT,
@@ -41,21 +53,11 @@ CLASS zcl_adtco_uri_mapper DEFINITION
                  program_lcl_interface_method TYPE string VALUE `/source/main#type=PROG%2FPNM;name=` ##NO_TEXT,
                  program_lcl_interface_attrib TYPE string VALUE `/source/main#type=PROG%2FPNA;name=` ##NO_TEXT,
                  program_lcl_interface_interf TYPE string VALUE `/source/main#type=PROG%2FPNN;name=` ##NO_TEXT,
-               END OF context,
-               BEGIN OF node_types,
-                 lcl_interface_type        TYPE string VALUE 'OONT' ##NO_TEXT,
-                 lcl_interface_method_def  TYPE string VALUE 'OOND' ##NO_TEXT,
-                 lcl_interface_attribute   TYPE string VALUE 'OONA' ##NO_TEXT,
-                 lcl_interface_interface   TYPE string VALUE 'OONN' ##NO_TEXT,
-                 lcl_method_definition     TYPE string VALUE 'OOLD' ##NO_TEXT,
-                 lcl_method_implementation TYPE string VALUE 'OOLI' ##NO_TEXT,
-                 lcl_attribute             TYPE string VALUE 'OOLA' ##NO_TEXT,
-                 lcl_type                  TYPE string VALUE 'OOLT' ##NO_TEXT,
-                 lcl_interface             TYPE string VALUE 'OOLN' ##NO_TEXT,
-               END OF node_types.
+               END OF context.
 
 
     CLASS-DATA: uri_mapper TYPE REF TO zcl_adtco_uri_mapper.
+    DATA do_escaping TYPE abap_bool.
     METHODS build_object_name
       IMPORTING
         node               TYPE REF TO snodetext
@@ -108,13 +110,13 @@ CLASS zcl_adtco_uri_mapper DEFINITION
         original_object_name TYPE eu_lname
       RETURNING
         VALUE(type)          TYPE string.
-    METHODS get_FG_name_from_object
+    METHODS get_fg_name_from_object
       IMPORTING
         original_object_name TYPE eu_lname
         original_object_type TYPE seu_obj
       RETURNING
         VALUE(object_name)   TYPE eu_lname.
-    METHODS update_object_name_for_FG
+    METHODS update_object_name_for_fg
       IMPORTING
         original_object_type TYPE seu_obj
         original_object_name TYPE eu_lname
@@ -156,13 +158,55 @@ CLASS zcl_adtco_uri_mapper DEFINITION
         VALUE(main_program) TYPE char70.
     METHODS adapt_uri_for_subclasses
       IMPORTING
+        object_type        TYPE seu_obj
+        VALUE(object_name) TYPE eu_lname
+        node               TYPE snodetext
+        objtype            TYPE seu_objtyp
+      CHANGING
+        uri                TYPE string.
+    METHODS escape_string
+      IMPORTING input                 TYPE any
+      RETURNING VALUE(escaped_string) TYPE string.
+    METHODS get_uri_for_semantic_object
+      IMPORTING
+        wb_request  TYPE REF TO cl_wb_request
         object_type TYPE seu_obj
-        value(object_name) TYPE eu_lname
+        object_name TYPE eu_lname
         node        TYPE snodetext
-        objtype     TYPE seu_objtyp
+      RETURNING
+        VALUE(uri)  TYPE string
+      RAISING
+        cx_adt_uri_mapping.
+    METHODS adapt_uri_for_includes
+      IMPORTING
+        object_name TYPE eu_lname
+        adt_ref     TYPE REF TO cl_adt_object_reference
       CHANGING
         uri         TYPE string.
-
+    METHODS get_uri_from_wb_request
+      IMPORTING
+        node              TYPE snodetext
+        object_name       TYPE eu_lname
+        object_type       TYPE seu_obj
+        VALUE(wb_request) TYPE REF TO cl_wb_request
+      RETURNING
+        VALUE(uri)        TYPE string.
+    METHODS update_node_for_750_classes
+      IMPORTING
+        node            TYPE REF TO snodetext
+      CHANGING
+        enclosed_object TYPE char70.
+    METHODS correct_object_type
+      IMPORTING
+        node        TYPE snodetext
+      CHANGING
+        object_type TYPE seu_obj.
+    METHODS get_workbench_request
+      IMPORTING
+                object_type       TYPE seu_obj
+                object_name       TYPE eu_lname
+                node              TYPE snodetext
+      RETURNING VALUE(wb_request) TYPE REF TO cl_wb_request.
 
 ENDCLASS.
 
@@ -178,7 +222,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
   METHOD build_node_type.
     node_type = node-type.
-    IF node-type+1(3) EQ swbm_c_type_cls_type AND node-text8 IS NOT INITIAL.
+    IF node-type+1(3) EQ swbm_c_type_cls_type AND node-text8 CP '*~*'.
       node_type+1(3) = swbm_c_type_intf_type.
     ENDIF.
     IF node-type+1(3) EQ swbm_c_type_cls_attribute AND node-text8 IS NOT INITIAL.
@@ -187,71 +231,150 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
     IF node-type+1(3) EQ swbm_c_type_cls_lintf_intf AND node-text8 IS NOT INITIAL.
       node_type+1(3) = swbm_c_type_prg_intf_def.
     ENDIF.
+    IF node-type+1(3) EQ swbm_c_type_class AND node-text8 IS NOT INITIAL.
+      node_type+1(3) = swbm_c_type_cls_mtd_impl.
+    ENDIF.
   ENDMETHOD.
 
   METHOD get_uri_for_tree_node.
     CHECK node-type(1) NE 'C'.
-
     node-type = build_node_type( node ).
-    DATA(wb) = cl_wb_object=>create_from_toolaccess_key(
-             p_object_type           = CONV #( node-type+1(3) )
-             p_object_name           = build_object_name( REF #( node ) )
-             p_enclosing_object      = build_enclosed_object(
-                                                    object_name = object_name
-                                                    object_type = object_type
-                                                    node       = REF #( node ) )
-             ).
-    IF sy-subrc EQ 0.
-      wb->get_request_key(
-        IMPORTING
-          p_object_type     = DATA(objtype)
-          p_object_name     = DATA(objkey)
-        EXCEPTIONS
-          key_not_available = 1
-          OTHERS            = 2
-      ).
-      IF sy-subrc EQ 0.
-
-        cl_wb_request=>create_from_object_ref(
-          EXPORTING
-            p_wb_object       = wb
-          RECEIVING
-            p_wb_request      = DATA(wb_request)
-          EXCEPTIONS
-            illegal_operation = 1
-            cancelled         = 2
-            OTHERS            = 3
-        ).
-        IF sy-subrc EQ 0.
-          TRY.
-              DATA(adt_reference) = cl_adt_tools_core_factory=>get_instance( )->get_uri_mapper( )->map_wb_request_to_objref( wb_request ).
-              uri = adt_reference->ref_data-uri.
-              adapt_uri_for_subclasses(
-                  EXPORTING
-                    object_type = object_type
-                    object_name = object_name
-                    node        = node
-                    objtype     = objtype
-                  CHANGING
-                    uri         = uri ).
-            CATCH cx_adt_uri_mapping.
-              uri = get_uri_directly( node                 = node
-                                      original_object_name = object_name
-                                      original_object_TYPE = object_type ).
-              IF uri IS NOT INITIAL.
-                RETURN.
-              ENDIF.
-          ENDTRY.
-
-
-        ENDIF.
-      ENDIF.
-    ENDIF.
+    correct_object_type( EXPORTING node        = node
+                         CHANGING  object_type = object_type ).
+    cl_wb_request=>create_from_encl_name(
+      EXPORTING
+        p_r3tr_type         = CONV #( object_type )
+        p_object_type           = CONV #( node-type+1(3) )
+        p_object_name           = build_object_name( REF #( node ) )
+        p_encl_object_name      = build_enclosed_object(
+                                            object_name = object_name
+                                            object_type = object_type
+                                            node       = REF #( node ) )
+        p_operation         = swbm_c_op_display
+      RECEIVING
+        p_wb_request        = DATA(wb_request)
+    EXCEPTIONS
+      OTHERS              = 0 ).
+    uri = get_uri_from_wb_request(
+      node        = node
+      object_name = object_name
+      object_type = object_type
+      wb_request  = wb_request ).
   ENDMETHOD.
 
-  METHOD adapt_uri_for_subclasses.
+  METHOD correct_object_type.
 
-    IF object_type CP prefix-class_pattern.
+    IF ( object_type EQ 'CLAS/OC' AND ( node-type CP 'OI*' OR node-type EQ 'OOI') ).
+      object_type = 'INTF/OI'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+
+  METHOD get_uri_from_wb_request.
+
+    TRY.
+        uri = get_uri_for_semantic_object( wb_request  = wb_request
+                                           object_type = object_type
+                                           object_name = object_name
+                                           node        = node ).
+      CATCH cx_root.
+        TRY.
+            wb_request = get_workbench_request(
+              object_type = object_type
+              object_name = object_name
+              node        = node ).
+            DATA(adt_reference) = cl_adt_tools_core_factory=>get_instance( )->get_uri_mapper( )->map_wb_request_to_objref( wb_request ).
+            uri = adt_reference->ref_data-uri.
+            adapt_uri_for_subclasses(
+              EXPORTING
+                object_type = object_type
+                object_name = object_name
+                node        = node
+                objtype     = wb_request->object_type
+              CHANGING
+                uri         = uri ).
+          CATCH cx_adt_uri_mapping.
+            uri = get_uri_directly( node                 = node
+                                    original_object_name = object_name
+                                    original_object_type = object_type ).
+        ENDTRY.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD get_workbench_request.
+
+    DATA(wb) = cl_wb_object=>create_from_toolaccess_key(
+     p_object_type           = CONV #( node-type+1(3) )
+     p_object_name           = build_object_name( REF #( node ) )
+     p_enclosing_object      = build_enclosed_object(
+                                            object_name = object_name
+                                            object_type = object_type
+                                            node       = REF #( node ) )
+     ).
+    cl_wb_request=>create_from_object_ref(
+      EXPORTING
+        p_wb_object       = wb
+      RECEIVING
+        p_wb_request      = wb_request
+      EXCEPTIONS
+        illegal_operation = 1
+        cancelled         = 2
+        OTHERS            = 3
+    ).
+
+  ENDMETHOD.
+
+
+
+
+
+  METHOD get_uri_for_semantic_object.
+
+    DATA(adtcore) = cl_adt_tools_core_factory=>get_instance( ).
+    DATA: semantic_builder TYPE REF TO object.
+    DATA: adt_ref TYPE REF TO cl_adt_object_reference.
+    CALL METHOD adtcore->('GET_SEMANTIC_URI_BUILDER')
+      RECEIVING
+        result = semantic_builder.
+
+    CALL METHOD semantic_builder->('IF_ADT_SEMANTIC_URI_BUILDER~MAP_WB_REQUEST_TO_OBJREF')
+      EXPORTING
+        i_wb_request    = wb_request
+        i_include_w_pos = COND sy-repid( WHEN node-text9(4) EQ 'REPS' THEN node-text9+4 )
+      RECEIVING
+        result          = adt_ref.
+    uri = adt_ref->ref_data-uri.
+    adapt_uri_for_includes( EXPORTING object_name = object_name
+                                      adt_ref     = adt_ref
+                            CHANGING  uri         = uri ).
+    do_escaping = abap_true.
+  ENDMETHOD.
+
+  METHOD adapt_uri_for_includes.
+
+    IF adt_ref->ref_data-uri CP '*/programs/programs/*' AND
+       adt_ref->ref_data-type CP 'PROG*' AND
+       adt_ref->ref_data-name NE object_name.
+      REPLACE '/programs/programs/' IN uri WITH '/programs/includes/'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+
+
+
+
+
+
+
+  METHOD adapt_uri_for_subclasses.
+    CHECK NOT ( node-type = node_types-method_redefintion_class ).
+    IF object_type CP prefix-class_pattern .
       object_name = get_origin_class_name( node       = node
                                            class_name = object_name
                                            objtype    = objtype ).
@@ -266,7 +389,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
   METHOD get_origin_class_name.
     origin_class_name = class_name.
     CASE objtype.
-      WHEN swbm_c_type_cls_attribute OR swbm_c_type_cls_mtd_def OR swbm_c_type_cls_evt.
+      WHEN swbm_c_type_cls_attribute OR swbm_c_type_cls_mtd_def OR swbm_c_type_cls_evt OR swbm_c_type_cls_type.
         DATA componentkey TYPE seocmpkey.
         CALL FUNCTION 'SEO_COMPONENT_BY_INHERITANCE'
           EXPORTING
@@ -303,9 +426,9 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
 
   METHOD update_original_class_name.
-
+    DATA(escaped_class_name) = escape_string( class_name ).
     REPLACE FIRST OCCURRENCE OF REGEX '/sap/bc/adt/oo/classes/(.*)/source/'
-                IN uri WITH |/sap/bc/adt/oo/classes/{ to_lower( class_name ) }/source/|.
+                IN uri WITH |/sap/bc/adt/oo/classes/{ to_lower( escaped_class_name ) }/source/|.
 
   ENDMETHOD.
 
@@ -317,14 +440,18 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
            swbm_c_type_cls_lintf_event OR
            swbm_c_type_cls_lintf_type OR
            swbm_c_type_cls_lintf_intf .
-        object_name = |{ node->text9+4(36) }                                   { node->text1 }|.
-      WHEN swbm_c_type_cls_mtd_impl OR swbm_c_type_intf_type.
+        IF strlen( node->text9 ) GE 4 AND node->text9(4) EQ object_types-report_include.
+          object_name = node->text1.
+        ELSE.
+          object_name = |{ node->text9+4(36) }                                   { node->text1 }|.
+        ENDIF.
+      WHEN swbm_c_type_cls_mtd_impl." OR swbm_c_type_intf_type.
         IF node->text8 IS NOT INITIAL.
           object_name = node->text8.
         ELSE.
           object_name = node->text1.
         ENDIF.
-      WHEN swbm_c_type_intf_attribute.
+      WHEN swbm_c_type_intf_attribute OR swbm_c_type_intf_type.
         IF node->text8 IS NOT INITIAL.
           SPLIT node->text8 AT '~' INTO DATA(object) object_name.
           IF object_name IS INITIAL.
@@ -339,7 +466,9 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
       WHEN OTHERS.
         object_name = node->text1 .
     ENDCASE.
-
+    IF node->type EQ node_types-method_redefintion_class.
+      object_name = node->text8.
+    ENDIF.
   ENDMETHOD.
 
 
@@ -361,6 +490,8 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
         IF object_type EQ object_types-fg.
           enclosed_object(40) = get_fg_main_program_name( object_name ).
         ENDIF.
+        update_node_for_750_classes( EXPORTING node            = node
+                                     CHANGING  enclosed_object = enclosed_object ).
       WHEN swbm_c_type_intf_type OR
            swbm_c_type_intf_attribute.
         IF node->text8 IS NOT INITIAL.
@@ -368,15 +499,56 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
         ELSE.
           enclosed_object = object_name.
         ENDIF.
+      WHEN swbm_c_type_cls_type.
+        IF node->text8 IS NOT INITIAL.
+          enclosed_object = node->text8.
+        ELSE.
+          enclosed_object = get_object_name(
+            original_object_name = object_name
+            original_object_type = object_type ).
+        ENDIF.
       WHEN OTHERS.
         enclosed_object = get_object_name(
           original_object_name = object_name
-          original_object_type = object_type
-        ).
-
+          original_object_type = object_type ).
     ENDCASE.
 
+    IF node->type EQ node_types-method_redefintion_class.
+      enclosed_object = node->text1.
+    ENDIF.
+
   ENDMETHOD.
+
+  METHOD update_node_for_750_classes.
+
+    IF node->text9 CP '*=*'.
+      DATA: component_version TYPE saprelease .
+      CALL FUNCTION 'DELIVERY_GET_COMPONENT_RELEASE'
+        EXPORTING
+          iv_compname    = 'SAP_BASIS'
+        IMPORTING
+          ev_compvers    = component_version
+        EXCEPTIONS
+          comp_not_found = 1
+          OTHERS         = 2.
+      IF sy-subrc EQ 0 AND component_version >= 750.
+        FIND FIRST OCCURRENCE OF '=' IN node->text9 MATCH OFFSET DATA(offset).
+        IF sy-subrc EQ 0.
+**            node->text9 = node->text9(offset).
+          offset = offset - 4.
+          enclosed_object(40) = node->text9+4(offset).
+          node->text8(40) = node->text9+4(offset).
+          IF ( node->text9 CP '*=CCIMP' ) AND node->type+1(3) EQ swbm_c_type_cls_loc_meth_def.
+            node->text9+4 = node->text9+4(offset).
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
 
   METHOD get_fg_main_program_name.
 
@@ -411,20 +583,20 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
           IMPORTING
             master  = string_name.
         object_name = get_fg_main_program_name( CONV #( string_name ) ).
-      WHEN object_types-report_include or object_types-program_include.
+      WHEN object_types-report_include OR object_types-program_include.
         CALL FUNCTION 'Z_ADTCO_GET_INC_MASTER_PROGRAM'
           EXPORTING
             include = CONV string( original_object_name )
           IMPORTING
             master  = string_name.
-        object_name = COND #( WHEN string_Name IS NOT INITIAL THEN string_name
+        object_name = COND #( WHEN string_name IS NOT INITIAL THEN string_name
                               ELSE original_object_name ).
       WHEN OTHERS.
         object_name = original_object_name.
     ENDCASE.
   ENDMETHOD.
 
-  METHOD get_FG_name_from_object.
+  METHOD get_fg_name_from_object.
     CASE original_object_type.
       WHEN object_types-fg_include.
         object_name = original_object_name.
@@ -451,7 +623,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
           node-text9(4) EQ prefix-type.
 
 
-    original_object_name = update_object_name_for_FG( original_object_type = original_object_type
+    original_object_name = update_object_name_for_fg( original_object_type = original_object_type
                                                       original_object_name = original_object_name ).
 
 
@@ -481,18 +653,22 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD build_fg_uri.
-    r_result = |{ context-includes }{ node-text8(40) }{ context-fg }{ original_object_name }{ get_context_for_fg_node_type( node-type ) }{ build_internal_name( node ) }|.
+    r_result = |{ context-includes }{
+     escape_string( node-text8(40) ) }{ context-fg }{
+      "escape_string( original_object_name ) }{
+       get_context_for_fg_node_type( node-type ) }{ build_internal_name( node ) }|.
   ENDMETHOD.
 
   METHOD build_program_uri.
     r_result = |{ get_program_or_include( node = node original_object_name = original_object_name )
-                                                            }{ node-text8(40) }{ get_context_for_node_type( node-type ) }{ build_internal_name( node )  }|.
+                                                            }{ escape_string( node-text8(40)  ) }{
+           get_context_for_node_type( node-type ) }{ build_internal_name( node )  }|.
   ENDMETHOD.
 
   METHOD add_uri_prefix.
 
     IF original_object_type  CP prefix-fugr_pattern.
-      uri = |{ prefix-adt_fg }{ original_object_name }/{ current_uri }|.
+      uri = |{ prefix-adt_fg }{  escape_string( original_object_name ) }/{ current_uri }|.
     ELSE.
       uri = |{ prefix-adt_program }{ current_uri }|.
     ENDIF.
@@ -501,10 +677,10 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
 
 
-  METHOD update_object_name_for_FG.
+  METHOD update_object_name_for_fg.
 
     IF original_object_type CP prefix-fugr_pattern.
-      DATA(fg_name) = get_FG_name_from_object(
+      DATA(fg_name) = get_fg_name_from_object(
         original_object_name = original_object_name
         original_object_type = original_object_type
       ).
@@ -522,7 +698,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
 
   METHOD build_internal_name.
-    internal_name = escape( val =  |{ node-text8+40(30) WIDTH = 30  }{ node-text1 }| format = cl_abap_format=>e_uri ).
+    internal_name = escape( val = |{ node-text8+40(30) WIDTH = 30  }{ node-text1 }| format = cl_abap_format=>e_uri ).
   ENDMETHOD.
 
 
@@ -552,9 +728,16 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
 
   METHOD get_context_for_fg_node_type.
-    node_context = SWITCH #( Node_type WHEN node_types-lcl_attribute THEN context-fg_lcl_attribute
+    node_context = SWITCH #( node_type WHEN node_types-lcl_attribute THEN context-fg_lcl_attribute
                                        WHEN node_types-lcl_method_implementation THEN context-fg_lcl_method
                                        WHEN node_types-lcl_method_definition THEN context-fg_lcl_method  ).
+  ENDMETHOD.
+
+  METHOD escape_string.
+    IF do_escaping EQ abap_false.
+      escaped_string = input.
+    ENDIF.
+    escaped_string = cl_http_utility=>if_http_utility~escape_url( CONV #( input ) ).
   ENDMETHOD.
 
 ENDCLASS.

@@ -9,6 +9,23 @@
    </INCLUDES>
    <FUNCTIONS>
     <item>
+     <FUNCNAME>Z_ADTCO_GET_BACKEND_COMP_VER</FUNCNAME>
+     <REMOTE_CALL>R</REMOTE_CALL>
+     <SHORT_TEXT>Get ADTCO Backend Version</SHORT_TEXT>
+     <EXPORT>
+      <RSEXP>
+       <PARAMETER>VERSION</PARAMETER>
+       <TYP>I</TYP>
+      </RSEXP>
+     </EXPORT>
+     <DOCUMENTATION>
+      <RSFDO>
+       <PARAMETER>VERSION</PARAMETER>
+       <KIND>P</KIND>
+      </RSFDO>
+     </DOCUMENTATION>
+    </item>
+    <item>
      <FUNCNAME>Z_ADTCO_GET_INC_MASTER_PROGRAM</FUNCNAME>
      <REMOTE_CALL>X</REMOTE_CALL>
      <SHORT_TEXT>Get Include Master Program</SHORT_TEXT>
@@ -58,6 +75,11 @@
        <PARAMETER>OBJECT_TYPE</PARAMETER>
        <TYP>SEU_OBJ</TYP>
       </RSIMP>
+      <RSIMP>
+       <PARAMETER>PARAMETERS</PARAMETER>
+       <OPTIONAL>X</OPTIONAL>
+       <TYP>TIHTTPNVP</TYP>
+      </RSIMP>
      </IMPORT>
      <EXPORT>
       <RSEXP>
@@ -72,6 +94,10 @@
       </RSFDO>
       <RSFDO>
        <PARAMETER>OBJECT_TYPE</PARAMETER>
+       <KIND>P</KIND>
+      </RSFDO>
+      <RSFDO>
+       <PARAMETER>PARAMETERS</PARAMETER>
        <KIND>P</KIND>
       </RSFDO>
       <RSFDO>

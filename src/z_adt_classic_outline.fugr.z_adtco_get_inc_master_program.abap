@@ -1,4 +1,4 @@
-FUNCTION Z_ADTCO_GET_INC_MASTER_PROGRAM.
+FUNCTION z_adtco_get_inc_master_program.
 *"----------------------------------------------------------------------
 *"*"Local Interface:
 *"  IMPORTING
@@ -7,9 +7,10 @@ FUNCTION Z_ADTCO_GET_INC_MASTER_PROGRAM.
 *"     VALUE(MASTER) TYPE  STRING
 *"     VALUE(MASTER_TYPE) TYPE  STRING
 *"----------------------------------------------------------------------
-  SELECT SINGLE master INTO @master
-  FROM d010inc
-  WHERE include EQ @include.
+  SELECT MASTER
+ FROM D010INC WHERE INCLUDE EQ @INCLUDE
+ ORDER BY PRIMARY KEY INTO @MASTER UP TO 1 ROWS .
+ ENDSELECT.
   IF sy-subrc EQ 0.
     SELECT SINGLE subc FROM trdir
       INTO @DATA(type)
