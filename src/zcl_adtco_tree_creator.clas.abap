@@ -7,7 +7,21 @@ CLASS zcl_adtco_tree_creator DEFINITION
     TYPES: tt_tree TYPE STANDARD TABLE OF snodetext WITH DEFAULT KEY
                                                     WITH NON-UNIQUE SORTED KEY type COMPONENTS type
                                                     WITH NON-UNIQUE SORTED KEY method COMPONENTS text1 type.
-
+    TYPES: BEGIN OF t_attribute,
+             clsname    TYPE seocompo-clsname,
+             cmpname    TYPE seocompo-cmpname,
+             version    TYPE seocompodf-version,
+             attrdonly  TYPE seocompodf-attrdonly,
+             mtdabstrct TYPE seocompodf-mtdabstrct,
+             mtdfinal   TYPE seocompodf-mtdfinal,
+             mtddecltyp TYPE seocompodf-mtddecltyp,
+             attdecltyp TYPE seocompodf-attdecltyp,
+             exposure   TYPE seocompodf-exposure,
+             typtype    TYPE seocompodf-typtype,
+             refcmpname TYPE seocompodf-refcmpname,
+             cmptype    TYPE seocompo-cmptype,
+             mtdtype    TYPE seocompo-mtdtype,
+           END OF t_attribute.
     METHODS create_tree
       IMPORTING
         !object_name      TYPE eu_lname
@@ -17,6 +31,8 @@ CLASS zcl_adtco_tree_creator DEFINITION
         VALUE(tree)       TYPE tt_tree .
   PROTECTED SECTION.
   PRIVATE SECTION.
+    CONSTANTS class_type TYPE string VALUE 'CLAS/OC' ##NO_TEXT.
+    CONSTANTS interface_type TYPE string VALUE 'INTF/OI' ##NO_TEXT.
     TYPES: BEGIN OF ty_parameters,
              load_redefinitions_of_method  TYPE abap_bool,
              load_all_levels_of_subclasses TYPE abap_bool,
@@ -121,6 +137,16 @@ CLASS zcl_adtco_tree_creator DEFINITION
         class_name           TYPE eu_lname
       RETURNING
         VALUE(redefinitions) TYPE seor_redefinitions_r.
+    METHODS adapt_attiributes
+      IMPORTING
+        att                  TYPE t_attribute
+        original_object_name TYPE eu_lname
+        node                 TYPE REF TO snodetext.
+    METHODS build_interfaces_range
+      IMPORTING
+        tree                    TYPE zcl_adtco_tree_creator=>tt_tree
+      RETURNING
+        VALUE(interfaces_range) TYPE ty_class_names.
 ENDCLASS.
 
 
@@ -309,7 +335,7 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD add_superclasses.
-    CHECK original_object_type EQ 'CLAS/OC'.
+    CHECK original_object_type EQ class_type.
     DATA(superclasses) = get_superclasses( CONV #( original_object_name ) ).
     ASSIGN tree[ KEY type COMPONENTS type = 'COS' ] TO FIELD-SYMBOL(<parent>).
     IF sy-subrc EQ 0.
@@ -351,58 +377,86 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
 
 
   METHOD add_visibility.
-    CHECK original_object_type EQ 'CLAS/OC' OR
-          original_object_type EQ 'INTF/OI'.
+    CHECK original_object_type EQ class_type OR
+          original_object_type EQ interface_type.
 
-
+    data: attributes type sorted table of t_attribute with NON-UNIQUE key clsname cmpname version.
     DATA(class_names) = build_class_range( original_object_name ).
+    IF original_object_type EQ class_type.
+      DATA(interfaces_mames) = build_interfaces_range( tree ).
+      APPEND LINES OF interfaces_mames TO class_names.
+    ENDIF.
 
 
     SELECT seocompo~clsname, seocompo~cmpname, version, attrdonly, mtdabstrct, mtdfinal, mtddecltyp, attdecltyp, exposure,typtype, refcmpname,
           cmptype, mtdtype
-      INTO TABLE @DATA(attributes)
+      INTO CORRESPONDING FIELDS OF TABLE @attributes
       FROM seocompodf
       INNER JOIN seocompo
       ON seocompo~clsname EQ seocompodf~clsname
       AND seocompo~cmpname EQ  seocompodf~cmpname
       WHERE seocompo~clsname IN @class_names.
 
-    SORT attributes BY clsname cmpname version.
     DELETE ADJACENT DUPLICATES FROM attributes COMPARING clsname cmpname.
 
     LOOP AT attributes ASSIGNING FIELD-SYMBOL(<att>).
-      LOOP AT tree ASSIGNING FIELD-SYMBOL(<tree>) USING KEY method WHERE text1 = <att>-cmpname
-                                                    AND type NP 'OOL*'.
-
-        IF <att>-cmptype EQ 3 AND <att>-clsname NE original_object_name.
-          <tree>-text8 = <att>-clsname.
-        ENDIF.
-        IF <att>-attrdonly EQ abap_true.
-          <tree>-kind7 = abap_true.
-        ENDIF.
-        IF <att>-mtdfinal EQ abap_true.
-          <tree>-kind8 = abap_true.
-        ENDIF.
-        <tree>-kind9 = COND #( WHEN <att>-attdecltyp IS NOT INITIAL THEN <att>-attdecltyp
-                               WHEN <att>-mtddecltyp IS NOT INITIAL THEN <att>-mtddecltyp
-                               ELSE 0  ).
-
-        IF <att>-mtdabstrct EQ abap_true.
-          <tree>-kind6 = abap_true.
-        ENDIF.
-        <tree>-kind5 = <att>-exposure.
-        <tree>-kind4 = <att>-cmptype.
-        IF <tree>-kind4 EQ 2.
-          CLEAR <tree>-kind4.
-        ENDIF.
-        IF <att>-mtdtype EQ 1.
-          <tree>-kind4 = 2.
-        ENDIF.
-      ENDLOOP.
+      IF NOT <att>-clsname IN interfaces_mames OR interfaces_mames IS INITIAL.
+        LOOP AT tree ASSIGNING FIELD-SYMBOL(<tree>) USING KEY method WHERE text1 = <att>-cmpname
+                                                      AND type NP 'OOL*'
+                                                      AND text8 NP '*~*'.
+          adapt_attiributes(
+            EXPORTING
+              att                  = <att>
+              original_object_name = original_object_name
+              node                 = REF #( <tree> ) ).
+        ENDLOOP.
+      ELSE.
+        DATA(name_pattern) = |{ <att>-clsname }~{ <att>-cmpname }|.
+        LOOP AT tree ASSIGNING <tree> USING KEY method WHERE text1 = <att>-cmpname
+                                                      AND type NP 'OOL*'
+                                                      AND text8 EQ name_pattern.
+          adapt_attiributes(
+            EXPORTING
+              att                  = <att>
+              original_object_name = original_object_name
+              node                 = REF #( <tree> ) ).
+        ENDLOOP.
+      ENDIF.
     ENDLOOP.
 
 
   ENDMETHOD.
+
+  METHOD adapt_attiributes.
+
+    IF att-cmptype EQ 3 AND att-clsname NE original_object_name AND node->text8 NP '*~*'.
+      node->text8 = att-clsname.
+    ENDIF.
+    IF att-attrdonly EQ abap_true.
+      node->kind7 = abap_true.
+    ENDIF.
+    IF att-mtdfinal EQ abap_true.
+      node->kind8 = abap_true.
+    ENDIF.
+    node->kind9 = COND #( WHEN att-attdecltyp IS NOT INITIAL THEN att-attdecltyp
+                           WHEN att-mtddecltyp IS NOT INITIAL THEN att-mtddecltyp
+                           ELSE 0  ).
+
+    IF att-mtdabstrct EQ abap_true.
+      node->kind6 = abap_true.
+    ENDIF.
+    node->kind5 = att-exposure.
+    node->kind4 = att-cmptype.
+    IF node->kind4 EQ 2.
+      CLEAR node->kind4.
+    ENDIF.
+    IF att-mtdtype EQ 1.
+      node->kind4 = 2.
+    ENDIF.
+
+  ENDMETHOD.
+
+
 
   METHOD add_local_classes_attributes.
 
@@ -539,6 +593,11 @@ CLASS zcl_adtco_tree_creator IMPLEMENTATION.
     WHERE refclsname = @class_name.
     SORT redefinitions BY clsname mtdname.
     DELETE ADJACENT DUPLICATES FROM redefinitions COMPARING clsname mtdname.
+  ENDMETHOD.
+
+
+  METHOD build_interfaces_range.
+    interfaces_range = VALUE #( FOR <node> IN tree USING KEY type WHERE ( type EQ 'OOI'   ) ( sign = 'I' option = 'EQ' low = <node>-text1 ) ).
   ENDMETHOD.
 
 ENDCLASS.

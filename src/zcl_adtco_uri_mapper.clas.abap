@@ -14,6 +14,8 @@ CLASS zcl_adtco_uri_mapper DEFINITION
                  lcl_attribute             TYPE string VALUE 'OOLA' ##NO_TEXT,
                  lcl_type                  TYPE string VALUE 'OOLT' ##NO_TEXT,
                  lcl_interface             TYPE string VALUE 'OOLN' ##NO_TEXT,
+                 class                     TYPE string VALUE 'OOC' ##NO_TEXT,
+                 interface                 TYPE string VALUE 'OOI' ##NO_TEXT,
                  method_redefintion_class  TYPE string VALUE 'ROM' ##NO_TEXT,
                END OF node_types.
     CLASS-METHODS: get_instance RETURNING VALUE(uri_mapper) TYPE REF TO zcl_adtco_uri_mapper.
@@ -107,7 +109,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
     METHODS get_program_or_include
       IMPORTING
         node                 TYPE snodetext
-        original_object_name TYPE eu_lname
+        original_object_name TYPE eu_lname "#EC NEEDED
       RETURNING
         VALUE(type)          TYPE string.
     METHODS get_fg_name_from_object
@@ -143,7 +145,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
     METHODS build_fg_uri
       IMPORTING
         node                 TYPE snodetext
-        original_object_name TYPE eu_lname
+        original_object_name TYPE eu_lname "#EC NEEDED
       RETURNING
         VALUE(r_result)      TYPE string.
     METHODS get_context_for_fg_node_type
@@ -170,7 +172,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
     METHODS get_uri_for_semantic_object
       IMPORTING
         wb_request  TYPE REF TO cl_wb_request
-        object_type TYPE seu_obj
+        object_type TYPE seu_obj "#EC NEEDED
         object_name TYPE eu_lname
         node        TYPE snodetext
       RETURNING
@@ -279,6 +281,18 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
                                            object_type = object_type
                                            object_name = object_name
                                            node        = node ).
+
+        adapt_uri_for_subclasses(
+              EXPORTING
+                object_type = object_type
+                object_name = object_name
+                node        = node
+                objtype     = wb_request->object_type
+              CHANGING
+                uri         = uri ).
+        if ( uri is INITIAL and node-type = node_types-class ).
+            uri = |/sap/bc/adt/oo/classes/{ to_lower( node-text1 ) }/source/main|.
+        endif.
       CATCH cx_root.
         TRY.
             wb_request = get_workbench_request(
@@ -321,9 +335,9 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
       RECEIVING
         p_wb_request      = wb_request
       EXCEPTIONS
-        illegal_operation = 1
-        cancelled         = 2
-        OTHERS            = 3
+        illegal_operation = 0
+        cancelled         = 0
+        OTHERS            = 0 "#EC SUBRC_OK
     ).
 
   ENDMETHOD.
@@ -373,7 +387,8 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
 
   METHOD adapt_uri_for_subclasses.
-    CHECK NOT ( node-type = node_types-method_redefintion_class ).
+    CHECK NOT ( node-type = node_types-method_redefintion_class OR
+                node-type = node_types-class ).
     IF object_type CP prefix-class_pattern .
       object_name = get_origin_class_name( node       = node
                                            class_name = object_name
@@ -453,7 +468,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
         ENDIF.
       WHEN swbm_c_type_intf_attribute OR swbm_c_type_intf_type.
         IF node->text8 IS NOT INITIAL.
-          SPLIT node->text8 AT '~' INTO DATA(object) object_name.
+          SPLIT node->text8 AT '~' INTO DATA(object) object_name. "#EC NEEDED
           IF object_name IS INITIAL.
             IF strlen( node->text9 ) GE 4 AND node->text9(4) EQ object_types-interface.
               object_name = node->text9.
@@ -495,7 +510,7 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
       WHEN swbm_c_type_intf_type OR
            swbm_c_type_intf_attribute.
         IF node->text8 IS NOT INITIAL.
-          SPLIT node->text8 AT '~' INTO enclosed_object DATA(tmp_object_name).
+          SPLIT node->text8 AT '~' INTO enclosed_object DATA(tmp_object_name). "#EC NEEDED
         ELSE.
           enclosed_object = object_name.
         ENDIF.
