@@ -276,6 +276,19 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
   METHOD get_uri_from_wb_request.
 
+    " local classes of programs and function groups: on 750 CL_OO_ADT_URI_MAPPER_CLASS
+    " looks for a class pool that does not exist and dumps with a non-catchable error
+    IF object_type NP prefix-class_pattern AND
+       ( node-type+1(3) EQ swbm_c_type_cls_local_attr  OR
+         node-type+1(3) EQ swbm_c_type_cls_local_event OR
+         node-type+1(3) EQ swbm_c_type_cls_local_type2 OR
+         node-type+1(3) EQ swbm_c_type_cls_local_intf2 ).
+      uri = get_uri_directly( node                 = node
+                              original_object_name = object_name
+                              original_object_type = object_type ).
+      RETURN.
+    ENDIF.
+
     TRY.
         uri = get_uri_for_semantic_object( wb_request  = wb_request
                                            object_type = object_type
@@ -535,6 +548,15 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD update_node_for_750_classes.
+
+    " attributes, events, types and interfaces of local classes need the full
+    " include name (ZCL_X=====CCIMP) that CL_OO_ADT_URI_MAPPER_CLASS expects
+    IF node->type+1(3) EQ swbm_c_type_cls_local_attr  OR
+       node->type+1(3) EQ swbm_c_type_cls_local_event OR
+       node->type+1(3) EQ swbm_c_type_cls_local_type2 OR
+       node->type+1(3) EQ swbm_c_type_cls_local_intf2.
+      RETURN.
+    ENDIF.
 
     IF node->text9 CP '*=*'.
       DATA: component_version TYPE saprelease .
