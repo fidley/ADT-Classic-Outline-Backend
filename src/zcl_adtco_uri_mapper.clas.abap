@@ -207,7 +207,7 @@ CLASS zcl_adtco_uri_mapper DEFINITION
       IMPORTING
                 object_type       TYPE seu_obj
                 object_name       TYPE eu_lname
-                node              TYPE snodetext
+                VALUE(node)       TYPE snodetext
       RETURNING VALUE(wb_request) TYPE REF TO cl_wb_request.
 
 ENDCLASS.
@@ -549,15 +549,6 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
 
   METHOD update_node_for_750_classes.
 
-    " attributes, events, types and interfaces of local classes need the full
-    " include name (ZCL_X=====CCIMP) that CL_OO_ADT_URI_MAPPER_CLASS expects
-    IF node->type+1(3) EQ swbm_c_type_cls_local_attr  OR
-       node->type+1(3) EQ swbm_c_type_cls_local_event OR
-       node->type+1(3) EQ swbm_c_type_cls_local_type2 OR
-       node->type+1(3) EQ swbm_c_type_cls_local_intf2.
-      RETURN.
-    ENDIF.
-
     IF node->text9 CP '*=*'.
       DATA: component_version TYPE saprelease .
       CALL FUNCTION 'DELIVERY_GET_COMPONENT_RELEASE'
@@ -569,6 +560,17 @@ CLASS zcl_adtco_uri_mapper IMPLEMENTATION.
           comp_not_found = 1
           OTHERS         = 2.
       IF sy-subrc EQ 0 AND component_version >= 750.
+        " on 750 the semantic URI builder is not available: CL_OO_ADT_URI_MAPPER_CLASS
+        " needs the full include name (ZCL_X=====CCIMP) to locate local class components
+        IF component_version EQ '750' AND
+           ( node->type+1(3) EQ swbm_c_type_cls_loc_meth_def  OR
+             node->type+1(3) EQ swbm_c_type_cls_loc_meth_impl OR
+             node->type+1(3) EQ swbm_c_type_cls_local_attr    OR
+             node->type+1(3) EQ swbm_c_type_cls_local_event   OR
+             node->type+1(3) EQ swbm_c_type_cls_local_type2   OR
+             node->type+1(3) EQ swbm_c_type_cls_local_intf2 ).
+          RETURN.
+        ENDIF.
         FIND FIRST OCCURRENCE OF '=' IN node->text9 MATCH OFFSET DATA(offset).
         IF sy-subrc EQ 0.
 **            node->text9 = node->text9(offset).
